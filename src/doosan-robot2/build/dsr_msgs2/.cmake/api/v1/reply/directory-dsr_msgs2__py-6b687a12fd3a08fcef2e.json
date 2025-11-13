@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "dsr_msgs2__py",
+		"source" : "/home/deepet/Desktop/autofuel_system/doosan-robot2/build/dsr_msgs2/dsr_msgs2__py"
+	}
+}

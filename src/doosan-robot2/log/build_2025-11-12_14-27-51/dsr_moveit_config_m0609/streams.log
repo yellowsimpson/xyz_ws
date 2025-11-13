@@ -1,0 +1,57 @@
+[0.058s] Invoking command in '/home/deepet/Desktop/autofuel_system/doosan-robot2/build/dsr_moveit_config_m0609': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake /home/deepet/Desktop/autofuel_system/doosan-robot2/dsr_moveit2/dsr_moveit_config_m0609 -DCMAKE_INSTALL_PREFIX=/home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609
+[0.139s] -- The C compiler identification is GNU 11.5.0
+[0.216s] -- The CXX compiler identification is GNU 11.5.0
+[0.240s] -- Detecting C compiler ABI info
+[0.354s] -- Detecting C compiler ABI info - done
+[0.367s] -- Check for working C compiler: /usr/bin/cc - skipped
+[0.367s] -- Detecting C compile features
+[0.368s] -- Detecting C compile features - done
+[0.378s] -- Detecting CXX compiler ABI info
+[0.508s] -- Detecting CXX compiler ABI info - done
+[0.522s] -- Check for working CXX compiler: /usr/bin/c++ - skipped
+[0.522s] -- Detecting CXX compile features
+[0.523s] -- Detecting CXX compile features - done
+[0.528s] -- Found ament_cmake: 2.5.4 (/opt/ros/jazzy/share/ament_cmake/cmake)
+[0.752s] -- Found Python3: /usr/bin/python3 (found version "3.12.3") found components: Interpreter 
+[1.030s] -- Configuring done (1.0s)
+[1.031s] -- Generating done (0.0s)
+[1.034s] -- Build files have been written to: /home/deepet/Desktop/autofuel_system/doosan-robot2/build/dsr_moveit_config_m0609
+[1.038s] Invoked command in '/home/deepet/Desktop/autofuel_system/doosan-robot2/build/dsr_moveit_config_m0609' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake /home/deepet/Desktop/autofuel_system/doosan-robot2/dsr_moveit2/dsr_moveit_config_m0609 -DCMAKE_INSTALL_PREFIX=/home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609
+[1.040s] Invoking command in '/home/deepet/Desktop/autofuel_system/doosan-robot2/build/dsr_moveit_config_m0609': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --build /home/deepet/Desktop/autofuel_system/doosan-robot2/build/dsr_moveit_config_m0609 -- -j32 -l32
+[1.101s] Invoked command in '/home/deepet/Desktop/autofuel_system/doosan-robot2/build/dsr_moveit_config_m0609' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --build /home/deepet/Desktop/autofuel_system/doosan-robot2/build/dsr_moveit_config_m0609 -- -j32 -l32
+[1.102s] Invoking command in '/home/deepet/Desktop/autofuel_system/doosan-robot2/build/dsr_moveit_config_m0609': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --install /home/deepet/Desktop/autofuel_system/doosan-robot2/build/dsr_moveit_config_m0609
+[1.116s] -- Install configuration: ""
+[1.118s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/ament_index/resource_index/package_run_dependencies/dsr_moveit_config_m0609
+[1.119s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/ament_index/resource_index/parent_prefix_path/dsr_moveit_config_m0609
+[1.121s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/environment/ament_prefix_path.sh
+[1.123s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/environment/ament_prefix_path.dsv
+[1.123s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/environment/path.sh
+[1.125s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/environment/path.dsv
+[1.126s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/local_setup.bash
+[1.126s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/local_setup.sh
+[1.128s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/local_setup.zsh
+[1.129s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/local_setup.dsv
+[1.129s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/package.dsv
+[1.130s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/ament_index/resource_index/packages/dsr_moveit_config_m0609
+[1.130s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/cmake/dsr_moveit_config_m0609Config.cmake
+[1.131s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/cmake/dsr_moveit_config_m0609Config-version.cmake
+[1.131s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/package.xml
+[1.131s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/launch
+[1.131s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/launch/moveit.rviz
+[1.133s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/launch/demo.launch.py
+[1.135s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/launch/start.launch.py
+[1.138s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/config
+[1.138s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/config/joint_limits.yaml
+[1.139s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/config/dsr.ros2_control.xacro
+[1.140s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/config/moveit_controllers.yaml
+[1.141s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/config/pilz_cartesian_limits.yaml
+[1.141s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/config/dsr.srdf
+[1.141s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/config/ros2_controllers.yaml
+[1.142s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/config/chomp_planning.yaml
+[1.142s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/config/initial_positions.yaml
+[1.142s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/config/ompl_planning.yaml
+[1.142s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/config/m0609.urdf.xacro
+[1.143s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/config/sensors_3d.yaml
+[1.143s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/config/kinematics.yaml
+[1.144s] -- Installing: /home/deepet/Desktop/autofuel_system/doosan-robot2/install/dsr_moveit_config_m0609/share/dsr_moveit_config_m0609/.setup_assistant
+[1.168s] Invoked command in '/home/deepet/Desktop/autofuel_system/doosan-robot2/build/dsr_moveit_config_m0609' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --install /home/deepet/Desktop/autofuel_system/doosan-robot2/build/dsr_moveit_config_m0609
