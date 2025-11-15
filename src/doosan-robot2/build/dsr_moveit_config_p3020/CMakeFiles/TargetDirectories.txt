@@ -1,9 +1,0 @@
-/home/deepet/Desktop/autofuel_system/doosan-robot2/build/dsr_moveit_config_p3020/CMakeFiles/uninstall.dir
-/home/deepet/Desktop/autofuel_system/doosan-robot2/build/dsr_moveit_config_p3020/CMakeFiles/dsr_moveit_config_p3020_uninstall.dir
-/home/deepet/Desktop/autofuel_system/doosan-robot2/build/dsr_moveit_config_p3020/CMakeFiles/test.dir
-/home/deepet/Desktop/autofuel_system/doosan-robot2/build/dsr_moveit_config_p3020/CMakeFiles/edit_cache.dir
-/home/deepet/Desktop/autofuel_system/doosan-robot2/build/dsr_moveit_config_p3020/CMakeFiles/rebuild_cache.dir
-/home/deepet/Desktop/autofuel_system/doosan-robot2/build/dsr_moveit_config_p3020/CMakeFiles/list_install_components.dir
-/home/deepet/Desktop/autofuel_system/doosan-robot2/build/dsr_moveit_config_p3020/CMakeFiles/install.dir
-/home/deepet/Desktop/autofuel_system/doosan-robot2/build/dsr_moveit_config_p3020/CMakeFiles/install/local.dir
-/home/deepet/Desktop/autofuel_system/doosan-robot2/build/dsr_moveit_config_p3020/CMakeFiles/install/strip.dir
