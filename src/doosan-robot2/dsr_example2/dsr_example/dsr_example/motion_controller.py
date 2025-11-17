@@ -47,8 +47,8 @@ DR_init.__dsr__model = ROBOT_MODEL
 # ─────────────────────────────────────────────────────────────
 # 안전/동작 파라미터
 TARGET_LABEL = "green_car"      # YOLO 허용 라벨(예: 자동차)
-CAP_LABEL = "black_cap"          # YOLO 허용 라벨(예: 자동차)
-NOZZLE_LABEL = "nozzels"         # YOLO 허용 라벨(예: 자동차)
+CAP_LABEL = "Cap"               # YOLO 허용 라벨(예: 자동차)
+NOZZLE_LABEL = "Nozzle"         # YOLO 허용 라벨(예: 자동차)
 LABEL_TIMEOUT_SEC = 3.0          # 허용 라벨 감지 유지 시간
 V_MAX = 60                       # 이동 속도 상한 (Doosan 단위)
 A_MAX = 60                       # 가속도 상한
@@ -59,14 +59,8 @@ WS_XY_MM = 800.0                 # XY 워크스페이스 절대 한계(±)
 
 CAMERA_OFFSET_TCP_Z_M = 0.05     # 카메라가 TCP보다 +5 cm (위)
 ORIENT_PRESET_POSJ = (20, 35, 105, 105, -90, 50)  # 바닥(-Y) 방향 프리셋
-
-ORIENT_POSJ_POS_XL = (10, 40, 80, 20, -30, 70) # 바닥(+X) 방향 프리셋 : 휘발유
-ORIENT_POSJ_POS_XR = (-15, 40, 80, 150, 30, -60) # 바닥(+X) 방향 프리셋 : 경유
-
-ORIENT_GUN_POS = (0, 0, 0, 0, 0, 0)
-ORIENT_CAP_POS = (0, 0, 0, 0, 0, 0)
-
-RUN_FUEL_POSJ = [10, 60, 85, 90, -95, 50]
+ORIENT_POSJ_POS_XL = (27, -6, 100, -90, 26, -180) # 바닥(+X) 방향 프리셋 : 휘발유
+ORIENT_POSJ_POS_XR = (-30, -10, 100, 85, 35, 0) # 바닥(+X) 방향 프리셋 : 경유
 
 # ─────────────────────────────────────────────────────────────
 class MotionController(Node):
@@ -86,9 +80,6 @@ class MotionController(Node):
         self.last_label_ts = 0.0
         self.allowed_label = CAP_LABEL
         self.last_car_detected_event = False
-        self.start_fuel = False
-        self.is_moving = False
-        self.prev_distance = None
 
         # 이동 상태
         self.is_busy = False
@@ -96,6 +87,9 @@ class MotionController(Node):
 
         self.last_base_coords = None
         self.last_detected_point = None
+
+        # 그리퍼 초기화
+        self._init_gripper_and_home()
 
         # 구독/퍼블리셔
         self.sub_start = self.create_subscription(String, '/fuel_task/start', self.on_task_start, 10)
@@ -107,10 +101,7 @@ class MotionController(Node):
         self.sub_realsense = self.create_subscription(String, '/fuel/realsense_detections', self.on_realsense_detections, 10)
 
         self.pub_status = self.create_publisher(String, '/fuel_status', 10)
-        self.pub_gripper = self.create_publisher(Float32, '/fuel/gripper_move', 10)
-
-        # 그리퍼 초기화
-        self._init_gripper_and_home()
+        self.pub_target_dir = self.create_publisher(Float32, '/target_direction', 10)
 
         # 힘/토크(있으면 사용)
         try:
@@ -137,17 +128,15 @@ class MotionController(Node):
                 raise RuntimeError("Gripper initialization failed")
 
             self.get_logger().info("그리퍼 초기 위치 오픈")
-            self.gripper_move(0)
+            self.gripper.move(0)
+            wait(1.5)
 
             self.get_logger().info("홈 자세 이동")
             movej([0, 0, 90, 0, 90, 0], 60, 60)
             wait(1.5)
 
-            # self.gripper_move(0)
-            # self.gripper_move(700)
-            # self.gripper_move(500)
-            # self.gripper_move(200)
-            # self.gripper_move(0)
+            self.gripper.move(0)
+            wait(1.5)
         except Exception as e:
             self.get_logger().error(f"❌ Gripper/Init error: {e}")
             raise
@@ -177,7 +166,7 @@ class MotionController(Node):
                     self.searching = False
                     self.detected_cap_once = True
                     self.last_label_ts = time.time()
-    
+
                 # 2️⃣ 좌표 갱신은 object_callback에서 처리하므로 여기서는 안 건드림
                 else:
                     if getattr(self, "detected_cap_once", False):
@@ -199,7 +188,7 @@ class MotionController(Node):
             return
 
     def on_car_detected(self, msg: String):
-        if not msg.data or self.current_state == "IN_PROGRESS":
+        if not msg.data:
             return  # 차량이 사라졌으면 무시
 
         # 상태 저장
@@ -230,8 +219,7 @@ class MotionController(Node):
         if self.current_state == "IN_PROGRESS":
             return
         
-        self.fuel_type = "경유" # 음성인식으로 경유 휘발유 결정
-
+        self.current_state = "IN_PROGRESS"
         self.get_logger().info("🚀 주유 시퀀스 시작: orient_negative_y() → 탐색 시작")
 
         # 1️⃣ 툴 -Y(바닥) 방향 회전
@@ -240,10 +228,10 @@ class MotionController(Node):
         self.search_for_object()
 
         # 2️⃣ 유종별 +X 방향 전환
-        self.orient_positive_x(self.fuel_type)
+        self.orient_positive_x()
 
         # 3️⃣ 객체 탐색 시작
-        # self.search_for_object()
+        self.search_for_object()
 
     def search_for_object(self):
         """객체가 인식될 때까지 상하좌우로 10cm씩 탐색 이동하는 함수"""
@@ -253,8 +241,8 @@ class MotionController(Node):
 
         step_mm = 50  # 5 cm
         directions = [
-            (0, 0, -step_mm, 0, 0, 0),   # 위로 이동
-            (0, 0, step_mm, 0, 0, 0),  # 아래로 이동
+            (0, 0, step_mm, 0, 0, 0),   # 위로 이동
+            (0, 0, -step_mm, 0, 0, 0),  # 아래로 이동
             (step_mm, 0, 0, 0, 0, 0),   # 오른쪽으로 이동
             (-step_mm, 0, 0, 0, 0, 0)   # 왼쪽으로 이동
         ]
@@ -275,7 +263,7 @@ class MotionController(Node):
 
                 # 1️⃣ 이동
                 try:
-                    # movel(dr_posx(*move_dir), v=20, a=20, mod=DR_MV_MOD_REL)
+                    movel(dr_posx(*move_dir), v=20, a=20, mod=DR_MV_MOD_REL)
                     wait(0.5)
                 except Exception as e:
                     self.get_logger().warn(f"⚠️ 탐색 이동 실패: {e}")
@@ -306,10 +294,10 @@ class MotionController(Node):
         """작업 단계(mode)에 따라 Hand–Eye 행렬을 설정"""
         T = np.eye(4)
         if mode == "fuel_cap":
-            T[:3, :3] = np.array([[-1,0,0],[0,0,-1],[0,1,0]])
+            T[:3, :3] = np.array([[1,0,0],[0,0,-1],[0,1,0]])
             T[:3, 3] = [0, 0, CAMERA_OFFSET_TCP_Z_M]
         elif mode == "nozzle":
-            T[:3, :3] = np.array([[0,-1,0],[0,0,1],[1,0,0]])
+            T[:3, :3] = np.array([[0,0,1],[0,1,0],[-1,0,0]])
             T[:3, 3] = [0, 0, CAMERA_OFFSET_TCP_Z_M]
         else:
             T[:3, :3] = np.eye(3)
@@ -349,29 +337,6 @@ class MotionController(Node):
         return T
     
     # ──────────────────── 좌표 noise 제거용 ─────────────────────────
-    def gripper_move(self, stroke: int, wait_sec: float = 2.0):
-        """
-        통합 그리퍼 제어 함수
-        - GripperController 가 있으면 사용
-        - 아니면 /fuel/fuel_grippermove (Float32) 토픽 사용
-        """
-        from DSR_ROBOT2 import set_robot_mode, ROBOT_MODE_AUTONOMOUS
-        set_robot_mode(ROBOT_MODE_AUTONOMOUS)
-        try:
-            self.get_logger().info(f"[Gripper] move({stroke}) using GripperController")
-            self.gripper.move(stroke)
-            from DSR_ROBOT2 import wait
-            wait(wait_sec)
-
-            # 2) fallback: Float32 퍼블리셔로 보내기
-            self.get_logger().info(f"[Gripper] move({stroke}) via pub_gripper")
-            msg = Float32()
-            msg.data = float(stroke)
-            self.pub_gripper.publish(msg)
-
-        except Exception as e:
-            self.get_logger().error(f"❌ Gripper move error: {e}")
-
     def smooth_coordinates(self, Xb, Yb, Zb):
         """최근 좌표 평균을 통한 이동평균 필터"""
         self.coord_buffer.append((Xb, Yb, Zb))
@@ -380,7 +345,7 @@ class MotionController(Node):
         avg = np.mean(self.coord_buffer, axis=0)
         return avg[0], avg[1], avg[2]
     
-    def filter_jump(self, Xb, Yb, Zb, threshold=0.15):
+    def filter_jump(self, Xb, Yb, Zb, threshold=0.05):
         """좌표 점프 방지: 이전 좌표 대비 급격한 변화 제거"""
         if self.last_valid_coord is None:
             self.last_valid_coord = (Xb, Yb, Zb)
@@ -399,144 +364,53 @@ class MotionController(Node):
     # ────────────────────────────────────────────────────────────────
     # 3D 타깃 좌표 수신 → Base 변환 → 안전 이동
     def object_callback(self, msg: PointStamped):
-        """YOLO 3D → Base 변환 → 필터링 → 상대이동/절대이동 분리"""
-
-        # 이미 이동 중이면 무시
-        if self.start_fuel:
-            return
-
+        """YOLO 3D 포인트 수신 → Base 좌표 변환 및 저장"""
         from DSR_ROBOT2 import get_current_posx
+
+        self.last_detected_point = msg
         try:
-            # 1) 카메라 좌표
-            
-            # 2) 로봇 TCP pose → 행렬화
-            pose = get_current_posx()[0][:6]
-            cur_x = pose[0] / 1000.0
-            cur_y = pose[1] / 1000.0
-            cur_z = pose[2] / 1000.0
-
             Xc, Yc, Zc = msg.point.x, msg.point.y, msg.point.z
-            self.last_detected_point = msg
-
+            pose = get_current_posx()[0][:6]
+            self.get_logger().info(f"DEBUG pose_raw={pose}")
             T_base2tcp = self.pose_to_matrix(pose)
             T_base2cam = T_base2tcp @ self.T_tcp2cam
-
-            # 3) 카메라 포인트 → Base 변환
             cam_point = np.array([[Xc], [Yc], [Zc], [1]])
             base_point = T_base2cam @ cam_point
             Xb, Yb, Zb = base_point[:3, 0]
-
-            # 4) 필터링
-            Xb, Yb, Zb = self.filter_jump(Xb, Yb, Zb)
-
-            # ---------------------------
-            # 5) 객체까지 거리 계산
-            # ---------------------------
-            dist = np.linalg.norm([Xb - cur_x, Yb - cur_y, Zb - cur_z])
-            self.get_logger().info(f"📏 현재 객체까지 거리: {dist:.3f} m")
-            
-            if dist > 1.5 or dist < 0.15:
-                return   # 무효
-
             Xb, Yb, Zb = self.smooth_coordinates(Xb, Yb, Zb)
+            Xb, Yb, Zb = self.filter_jump(Xb, Yb, Zb)
             self.last_base_coords = (Xb, Yb, Zb)
-            # ---------------------------
-            # 5-1) 거리 증가 감지
-            # ---------------------------
-            if self.prev_distance is not None:
-                if dist > self.prev_distance + 0.02:
-                    self.get_logger().warn("⚠️ 객체와 거리 증가 → 방향 재보정 & 감속 접근 수행")
-                    self.perform_relative_approach(Xb, Yb, Zb, gain=0.5)
-                    self.prev_distance = dist
-                    return
-            
-            # 거리 정상 감소 → 정상적인 상대 이동
-            self.prev_distance = dist
-
-            # ---------------------------
-            # 6) Rough 접근 (상대 이동)
-            # ---------------------------
-            if dist > 0.25:   # 25cm 이상 멀리 있으면 → 상대 이동
-                self.perform_relative_approach(Xb, Yb, Zb, gain=0.5)
-            else:
-                self.perform_final_absolute_move(Xb, Yb, Zb)
+            self.get_logger().info(f"📍 감지 좌표(Base): X={Xb:.3f} Y={Yb:.3f} Z={Zb:.3f}")
+        
+            # 감지 성공 → 탐색 중단 및 이동 준비
+            if getattr(self, "searching", False):
+                self.get_logger().info("🛑 감지됨 → 탐색 종료 후 이동 준비")
+                self.searching = False
+                self.ready_to_move = True
 
         except Exception as e:
-            self.get_logger().warn(f"⚠️ 좌표 변환 실패: {e}")
+            self.get_logger().warn(f"⚠️ 좌표 변환 실패, 재시도 예정: {e}")
             self.ready_to_move = False
             self.error_retrying = True
-            # self.create_timer(3.0, self.restart_search)
+            # 3초 후 탐색 재개
+            self.create_timer(3.0, self.restart_search)
 
-    def perform_relative_approach(self, Xb, Yb, Zb, gain=1.0):
-        """객체 방향으로 정확히 상대 이동"""
-        from DSR_ROBOT2 import movel, get_current_posx, DR_MV_MOD_REL
+    def restart_search(self):
+        """좌표 변환 실패 시 탐색 재개"""
+        if not getattr(self, "searching", False):
+            self.get_logger().info("🔄 재탐색 재시작")
+            self.searching = True
+            self.search_for_object()
 
-        # --- 현재 TCP 위치 (base 기준) ---
-        cur_pose = get_current_posx()[0][:6]
-        cur_x = cur_pose[0] / 1000.0
-        cur_y = cur_pose[1] / 1000.0
-        cur_z = cur_pose[2] / 1000.0
-
-        # --- 객체 방향 벡터 (진짜 상대 방향) ---
-        dx = (Xb - cur_x) * gain
-        dy = (Yb - cur_y) * gain
-        dz = (Zb - cur_z) * gain
-
-        # raw 방향로그
-        self.get_logger().info(
-            f"➡️ 상대 이동 방향(raw): dx={dx:.3f}, dy={dy:.3f}, dz={dz:.3f}"
-        )
-
-        # --- 이동량 클램핑 ---
-        dx = np.clip(dx, -0.05, 0.05)
-        dy = np.clip(dy, -0.05, 0.05)
-        dz = np.clip(dz, -0.05, 0.05)
-
-        self.get_logger().info(
-            f"🟦 상대이동 dx={dx:.3f}, dy={dy:.3f}, dz={dz:.3f}"
-        )
-
-        try:
-            movel([dx*1000, dy*1000, dz*1000, 0, 0, 0],
-                v=150, a=150, mod=DR_MV_MOD_REL)
-
-        except Exception as e:
-            self.get_logger().warn(f"⚠️ 상대이동 실패: {e}")
-
-    def perform_final_absolute_move(self, Xb, Yb, Zb):
-        """가까이 왔을 때 → 최종 정밀 absolute 이동"""
-        from DSR_ROBOT2 import movej
-
-        # 현재 orientation 사용
-        from DSR_ROBOT2 import get_current_posx
-        cur_pose = get_current_posx()[0][:6]
-        rx, ry, rz = cur_pose[3], cur_pose[4], cur_pose[5]
-
-        target = [Xb*1000, Yb*1000, Zb*1000, rx, ry, rz]
-
-        self.get_logger().info(
-            f"🟥 최종 절대 이동: {target}"
-        )
-
-        try:
-            self.is_moving = True
-            movej(target, v=60, a=60)
-            self.is_moving = False
-            self.ready_to_move = True
-
-        except Exception as e:
-            self.get_logger().warn(f"⚠️ 최종 절대 이동 실패: {e}")
-            self.is_moving = False
-            
     def control_loop(self):
-        if not self.last_base_coords or self.is_busy or self.searching or self.start_fuel:
+        if not self.last_base_coords or self.is_busy or self.searching:
             return
 
         Xb, Yb, Zb = self.last_base_coords
         self.is_busy = True
 
         try:
-            from DSR_ROBOT2 import movel, wait, get_current_posj, get_current_posx, DR_MV_MOD_ABS, DR_MV_MOD_REL
+            from DSR_ROBOT2 import movel, wait, get_current_posx, DR_MV_MOD_ABS, DR_MV_MOD_REL
             from DR_common2 import posx
             pose = get_current_posx()[0][:6]
             # 공통 접근 동작
@@ -555,15 +429,6 @@ class MotionController(Node):
                 wait(1.5)
                 self.rotate_grip(2, True)
 
-                movel(posx(0, 30, 30, 0, 0, 0), v=80, a=80, mod=DR_MV_MOD_REL)
-                wait(1.0)
-                movel(posx(0, 50, 0, 0, 0, 0), v=80, a=80, mod=DR_MV_MOD_REL)
-                wait(1.0)
-                self.orient_z_down()
-                ORIENT_CAP_POS = get_current_posj()
-                self.check_crash()
-                self.start_fuel = True
-
             elif self.mode == "nozzle":
                 # 주유건 쪽으로 접근
                 hold_distance_mm = 80
@@ -571,7 +436,7 @@ class MotionController(Node):
                 self.get_logger().info(f"DEBUG pose={target}")
                 movel(target, v=30, a=30, mod=DR_MV_MOD_ABS)
                 wait(2)
-                self.gripper_move(600)
+                self.gripper.move(600)
 
         except Exception as e:
             self.get_logger().error(f"❌ 이동 실패: {e}")
@@ -655,31 +520,6 @@ class MotionController(Node):
             self.get_logger().info("🛑 Stopped & retreated (tool Z+10mm)")
         except Exception as e:
             self.get_logger().warn(f"Stop/retreat failed: {e}")
-            
-    def check_crash(self):
-        from DSR_ROBOT2 import (task_compliance_ctrl, set_desired_force, get_tool_force,
-            release_force, release_compliance_ctrl, amovel, wait, DR_MV_MOD_REL)
-        from DR_common2 import posx
-        
-        k_d = [500.0, 500.0, 500.0, 200.0, 200.0, 200.0]
-        task_compliance_ctrl(k_d)
-        # 강성 제어
-        f_d = [0.0, 0.0, -20, 0.0, 0.0, 0.0]
-        f_dir = [0, 0, 1, 0, 0, 0]
-        set_desired_force(f_d, f_dir)
-        wait(2.0)
-
-        # 외력감지
-        while True:
-            force_ext = get_tool_force()
-            # c_pos = get_current_posx()
-            # x, y, z = c_pos[0]
-            if force_ext[2] > 4:
-                release_force()
-                release_compliance_ctrl()
-
-                self.gripper_move(0)
-                break
 
     # 주유구를 오픈하기 위해 그리퍼를 회전시키는 함수
     def rotate_grip(self, cnt: int, b_open: bool = True):
@@ -691,98 +531,55 @@ class MotionController(Node):
 
         if b_open:
             while count < cnt :
-                self.gripper_move(360)
+                self.gripper.move(580)
+                wait(1.5)
                 
                 movej(posj(0, 0, 0, 0, 0, open_angle), v=120, a=120, mod=DR_MV_MOD_REL)
                 wait(1.0)
                 count = count + 1
 
                 if count < cnt:
-                    self.gripper_move(100)
+                    self.gripper.move(440)
+                    wait(1.5)
                     movej(posj(0, 0, 0, 0, 0, -open_angle), v=120, a=120, mod=DR_MV_MOD_REL)
                     wait(1.0)
 
     # ─────────────────────────────────────────────────────────
-    def orient_positive_x(self, type:str):
-        from DSR_ROBOT2 import get_current_posx, get_current_posj, movej, movel, wait, DR_MV_MOD_REL, DR_MV_MOD_ABS
-        from DR_common2 import posx, posj
+    def orient_positive_x(self):
+        from DSR_ROBOT2 import movej, wait, DR_MV_MOD_ABS
+        from DR_common2 import posj
         # 유종 상태 확인
-        # fuel_type = getattr(self, "fuel_type", "").lower()
+        fuel_type = getattr(self, "fuel_type", "").lower()
 
-        self.start_fuel = True
         # 휘발유 → XL / 경유 → XR
-        if "gas" in type or "휘발유" in type:
+        if "gas" in fuel_type or "휘발" in fuel_type:
             target_pose = posj(*ORIENT_POSJ_POS_XL)
-            # label = "휘발유(+XL)"
-        elif "diesel" in type or "경유" in type:
+            label = "휘발유(+XL)"
+        elif "diesel" in fuel_type or "경유" in fuel_type:
             target_pose = posj(*ORIENT_POSJ_POS_XR)
-            # label = "경유(+XR)"
+            label = "경유(+XR)"
         else:
             # 기본은 XL로 설정
             target_pose = posj(*ORIENT_POSJ_POS_XL)
-            # label = "기본(+XL, 유종 미지정)"
-        
-        movej(target_pose, v=50, a=50, mod=DR_MV_MOD_ABS)
-        wait(2)
+            label = "기본(+XL, 유종 미지정)"
 
-        movel(posx(50, 0, 0, 0, 0, 0), v=60, a=60, mod=DR_MV_MOD_REL)
-        wait(1.5)
-        self.gripper_move(500)
-        ORIENT_GUN_POS = get_current_posj()
-
-        movel(posx(-90, 0, 20, 0, 0, 0), v=60, a=60, mod=DR_MV_MOD_REL)
-        wait(1.5)
-
-        target_pose = posj(*RUN_FUEL_POSJ)
-        
-        movej(target_pose, v=80, a=80, mod=DR_MV_MOD_ABS)
-        wait(2)
-
-        # movel(posx(-50, 0, 0, 0, 0, 0), v=60, a=60, mod=DR_MV_MOD_REL)
-        # wait(1.5)
-
-        # self.get_logger().info(f"🧭 툴을 +X 방향으로 회전 중… ({label})")
-        # try:
-        #     movej(target_pose, v=50, a=50, mod=DR_MV_MOD_ABS)
-        #     wait(2)
-        #     self.get_logger().info(f"✅ 툴 방향 전환 완료 ({label})")
-        # except Exception as e:
-        #     self.get_logger().error(f"❌ +X 방향 전환 실패 ({label}): {e}")
+        self.get_logger().info(f"🧭 툴을 +X 방향으로 회전 중… ({label})")
+        try:
+            movej(target_pose, v=50, a=50, mod=DR_MV_MOD_ABS)
+            wait(2)
+            self.get_logger().info(f"✅ 툴 방향 전환 완료 ({label})")
+        except Exception as e:
+            self.get_logger().error(f"❌ +X 방향 전환 실패 ({label}): {e}")
 
     def orient_negative_y(self):
-        self.current_state = "IN_PROGRESS"
-
         from DSR_ROBOT2 import movej, wait, DR_MV_MOD_ABS
         from DR_common2 import posj
-
-        # 이동 시작 → 감지 중단
-        self.is_moving = True
-
         self.get_logger().info("🧭 툴을 -Y(바닥) 방향으로 회전 중…")
         target_pose = posj(*ORIENT_PRESET_POSJ)
         movej(target_pose, v=50, a=50, mod=DR_MV_MOD_ABS)
         wait(2)
         self.get_logger().info("✅ 툴 방향 전환 완료 (-Y)")
 
-        # 이동 종료 → 감지 재개
-        self.is_moving = False
-
-    def orient_z_down(self):
-        from DSR_ROBOT2 import (get_current_posx, movel, wait, DR_MV_MOD_ABS)
-        from DR_common2 import posx
-
-        # 이동 시작 → 감지 중단
-        self.is_moving = True
-        
-        c_pos = get_current_posx()
-        x, y, z = c_pos[0][0:3]
-        target_pos = posx(x, y, z, 0, 180, 0)
-
-        movel(target_pos, v=50, a=50, mod=DR_MV_MOD_ABS)
-        wait(3)
-        
-        # 이동 종료 → 감지 재개
-        self.is_moving = False
     # ─────────────────────────────────────────────────────────
     # 비상 정지
     def on_stop_signal(self, msg: Bool):
@@ -811,11 +608,7 @@ def main(args=None):
     node.orient_negative_y()      # -Y 방향 전환
     node.set_handeye_mode("fuel_cap")
     node.search_for_object()      # 바로 탐색 시작
-
-    node.orient_positive_x("휘발유")      # -X 방향 전환
-    node.set_handeye_mode("nozzle")
-    node.search_for_object()      # 바로 탐색 시작
-
+    
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

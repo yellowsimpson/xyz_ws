@@ -68,19 +68,16 @@ g_oil1_go_posj = [-9, 68, 22, 91, 88, -88]
 g_oil2_go_posj = [-14, 65, 48, 87, 86, -123]
 g_oil1_end_posj = [-9, 68, 22, 91, 88, -88]
 g_oil2_end_posj = [-14, 65, 48, 87, 86, -123]
-
-ORIENT_POSJ_POS_XL = (10, 40, 80, 20, -30, 70) # 바닥(+X) 방향 프리셋 : 휘발유
-ORIENT_POSJ_POS_XR = (-15, 40, 80, 150, 30, -60) # 바닥(+X) 방향 프리셋 : 경유
 # -----------------------------------------------------------------#
 
 g_find_car_posj = [0, 0, 0, 0, 0, 0]
 g_find_nozzle_posj = [0, 0, 0, 0, 0, 0]
 
-grip_shot = 650
-grip_gun = 500
+grip_shot = 600
+grip_gun = 600
 
-g_Cap_Grip_Off = 100
-g_Cap_Grip_On = 400
+g_Cap_Grip_Off = 440
+g_Cap_Grip_On = 580
 
 class FuelTaskManager(Node):
     def __init__(self):
@@ -318,9 +315,9 @@ class FuelTaskManager(Node):
         try:
             for i in range(cnt):
                 self.gripper.move(grip_shot)
-                wait(1.5)
+                wait(1.0)
                 self.gripper.move(grip_gun)
-                wait(1.5)
+                wait(1.0)
 
         except Exception as e:
             self.get_logger().error(f"❌ Gripper 반복 동작 중 오류: {e}")  
@@ -397,33 +394,34 @@ class FuelTaskManager(Node):
         self.check_crash()
 
         # 주유건 위치로 이동 후 그리퍼 닫기
-        movej(posj(*ORIENT_POSJ_POS_XL), 100, 100)
+        movej(g_oil1_ready_posj, 100, 100)
         wait(2.0)
 
-        movel(posx(50, 0, 0, 0, 0, 0), v=g_vel_move, a=g_vel_move, mod=DR_MV_MOD_REL)
+        movel(posx(100, -10, 0, 0, 0, 0), v=g_vel_move, a=g_vel_move, mod=DR_MV_MOD_REL)
         wait(2.0)
         
+        g_oil1_end_posj = get_current_posj()
         self.gripper.move(grip_gun)
         wait(2.5)
 
         # 주유건 그립 이후 주유건 뽑아 가기
-        movel(posx(-120, 0, 0, 0, 0, 0), v=g_vel_move, a=g_vel_move, mod=DR_MV_MOD_REL)
+        movel(posx(0, 0, 120, 0, 0, 0), v=g_vel_move, a=g_vel_move, mod=DR_MV_MOD_REL)
         wait(2.0)
         g_oil1_go_posj = get_current_posj()
-        # movel(posx(-100, -120, 150, 0, 0, 0), v=g_vel_move, a=g_vel_move, mod=DR_MV_MOD_REL)
-        # wait(2.0)
+        movel(posx(-100, -120, 150, 0, 0, 0), v=g_vel_move, a=g_vel_move, mod=DR_MV_MOD_REL)
+        wait(2.0)
 
         # 주유구 위치로 이동 
         movel(g_fuel_car1_posx, 80, 80)
-        wait(2.0)
+        wait(3.0)
         movel(g_fuel_car2_posx, 80, 80)
         # movel(posx(0, -75, -65, 0, 0, 0), v=g_vel_move, a=g_vel_move, mod=DR_MV_MOD_REL)
         wait(2.0)
 
         #--------------------- 직접 주유 작업 시작 ---------------------#
         # 주유 작업 반복 수행
-        self.run_fuel_task(m_count)
-        # wait(4.0)
+        # self.run_fuel_task(m_count)
+        wait(20.0)
         
         # (car)주유구에서 주유건 빼기
         movel(posx(0, 75, 65, 0, 0, 0), v=g_vel_move, a=g_vel_move, mod=DR_MV_MOD_REL)
@@ -490,7 +488,7 @@ def main(args=None):
     try:
         while rclpy.ok():
             rclpy.spin_once(fuel_controller, timeout_sec=0.05)
-            fuel_controller.start_simulation_fuel(10000)
+            # fuel_controller.start_simulation_fuel(10000)
             # Test code
             # fuel_controller.start_gasoline_fuel(60000)
             # for d in detected_car_list:

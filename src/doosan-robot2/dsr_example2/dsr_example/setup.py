@@ -28,10 +28,11 @@ setup(
     license='BSD',
     # tests_require=['pytest'],
     entry_points={
-        'console_scripts': [
+            'console_scripts': [
                 'example_gripper = dsr_example.simple.example_gripper:main',
                 'example_move = dsr_example.simple.example_move:main',
                 'fuel_task_manager = dsr_example.fuel_task_manager:main',
+                'fuel_listener_node = dsr_example.fuel_listener_node:main',
                 'webcam_manager_ros = dsr_example.webcam_manager_ros:main',
                 'realsense_manager_ros = dsr_example.realsense_manager_ros:main',
                 'vision_target_node = dsr_example.vision_target_node:main',
@@ -40,7 +41,11 @@ setup(
                 'face_payment_manager = dsr_example.face_payment_manager:main',
                 'motion_controller = dsr_example.motion_controller:main',
                 'test_task_manager = dsr_example.test_task_manager:main',
+                'test_listener_node = dsr_example.test_listener_node:main',
+                'realsense_streamer = dsr_example.realsense_streamer:main',
+                'webcam_streamer = dsr_example.webcam_streamer:main',
+                'ocr_manager_ros = dsr_example.ocr_manager_ros:main',
+                'ocr_streamer = dsr_example.ocr_streamer:main'
             ],
         },
-    
     )
