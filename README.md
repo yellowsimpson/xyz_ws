@@ -47,3 +47,17 @@ uvicorn server:app --host 0.0.0.0 --port 8000 --reload
 두번째거는 smartfuelapp/server  디렉토리 내에서 하면 됨
 
 https://aistudio.google.com/app/apikey
+
+
+
+전체 코드 돌리는 명령어 8개
+uvicorn server:app --host 0.0.0.0 --port 8000 --reload
+flutter run 
+
+ros2 run dsr_example webcam_streamer
+ros2 run dsr_example webcam_manager_ros
+ros2 run dsr_example realsense_streamer
+ros2 run dsr_example realsense_manager_ros
+ros2 run dsr_example ocr_manager_ros
+ros2 run dsr_example ocr_streamer
+
