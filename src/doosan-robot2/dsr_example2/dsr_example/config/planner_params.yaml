@@ -1,0 +1,13 @@
+cot_vla_planner_node:
+  ros__parameters:
+    target_label: "black_cap"    # YOLO 라벨명
+    buffer_size: 15              # 좌표 버퍼
+    ema_alpha: 0.3               # 지수평활
+    max_pixel_step: 10.0         # 2D 보정의 프레임당 최대 px 이동
+    z_min: 0.12
+    z_max: 1.20
+    # RealSense 카메라 내부파라미터는 2) 자동로드 노드가 set_param로 주입
+    fx: 615.0
+    fy: 615.0
+    cx: 320.0
+    cy: 240.0

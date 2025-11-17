@@ -47,8 +47,8 @@ DR_init.__dsr__model = ROBOT_MODEL
 # ─────────────────────────────────────────────────────────────
 # 안전/동작 파라미터
 TARGET_LABEL = "green_car"      # YOLO 허용 라벨(예: 자동차)
-CAP_LABEL = "Cap"               # YOLO 허용 라벨(예: 자동차)
-NOZZLE_LABEL = "Nozzle"         # YOLO 허용 라벨(예: 자동차)
+CAP_LABEL = "black_cap"          # YOLO 허용 라벨(예: 자동차)
+NOZZLE_LABEL = "nozzels"         # YOLO 허용 라벨(예: 자동차)
 LABEL_TIMEOUT_SEC = 3.0          # 허용 라벨 감지 유지 시간
 V_MAX = 60                       # 이동 속도 상한 (Doosan 단위)
 A_MAX = 60                       # 가속도 상한
@@ -143,11 +143,11 @@ class MotionController(Node):
             movej([0, 0, 90, 0, 90, 0], 60, 60)
             wait(1.5)
 
-            self.gripper_move(0)
-            self.gripper_move(700)
-            self.gripper_move(500)
-            self.gripper_move(200)
-            self.gripper_move(0)
+            # self.gripper_move(0)
+            # self.gripper_move(700)
+            # self.gripper_move(500)
+            # self.gripper_move(200)
+            # self.gripper_move(0)
         except Exception as e:
             self.get_logger().error(f"❌ Gripper/Init error: {e}")
             raise
@@ -380,7 +380,7 @@ class MotionController(Node):
         avg = np.mean(self.coord_buffer, axis=0)
         return avg[0], avg[1], avg[2]
     
-    def filter_jump(self, Xb, Yb, Zb, threshold=0.05):
+    def filter_jump(self, Xb, Yb, Zb, threshold=0.15):
         """좌표 점프 방지: 이전 좌표 대비 급격한 변화 제거"""
         if self.last_valid_coord is None:
             self.last_valid_coord = (Xb, Yb, Zb)
@@ -427,9 +427,7 @@ class MotionController(Node):
             Xb, Yb, Zb = base_point[:3, 0]
 
             # 4) 필터링
-            Xb, Yb, Zb = self.smooth_coordinates(Xb, Yb, Zb)
             Xb, Yb, Zb = self.filter_jump(Xb, Yb, Zb)
-            self.last_base_coords = (Xb, Yb, Zb)
 
             # ---------------------------
             # 5) 객체까지 거리 계산
@@ -437,6 +435,11 @@ class MotionController(Node):
             dist = np.linalg.norm([Xb - cur_x, Yb - cur_y, Zb - cur_z])
             self.get_logger().info(f"📏 현재 객체까지 거리: {dist:.3f} m")
             
+            if dist > 1.5 or dist < 0.15:
+                return   # 무효
+
+            Xb, Yb, Zb = self.smooth_coordinates(Xb, Yb, Zb)
+            self.last_base_coords = (Xb, Yb, Zb)
             # ---------------------------
             # 5-1) 거리 증가 감지
             # ---------------------------
