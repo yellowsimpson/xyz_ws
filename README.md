@@ -49,6 +49,7 @@ uvicorn server:app --host 0.0.0.0 --port 8000 --reload
 https://aistudio.google.com/app/apikey
 
 
+colcon build --packages-select dsr_example
 
 전체 코드 돌리는 명령어 8개
 uvicorn server:app --host 0.0.0.0 --port 8000 --reload
