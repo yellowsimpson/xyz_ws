@@ -43,7 +43,6 @@ flutter run
 uvicorn server:app --host 0.0.0.0 --port 8000 --reload
 
 첫번째거는 smartfuelapp 디렉토리 내에서 하면 됨
-
 두번째거는 smartfuelapp/server  디렉토리 내에서 하면 됨
 
 https://aistudio.google.com/app/apikey
