@@ -1,15 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:flutter_tts/flutter_tts.dart';
-import 'package:speech_to_text/speech_to_text.dart';
 import 'package:http/http.dart' as http;
-
+import 'package:provider/provider.dart';
+import 'package:smart_fuel/services/conversation_manager_service.dart';
+import 'package:smart_fuel/services/voice_interaction_service.dart';
+import 'package:smart_fuel/config/app_config.dart';
 import 'package:smart_fuel/widgets/realsense_view.dart';
 import 'package:smart_fuel/services/llm_service.dart';
+import 'package:smart_fuel/widgets/voice_command_bar.dart';
 import 'package:smart_fuel/widgets/webcam_view.dart';
+import 'package:smart_fuel/screens/fuel_selection_screen.dart';
+import 'package:smart_fuel/theme/app_theme.dart';
 
+/// 주유 진행 상태를 보여주는 화면
 class FuelProgressScreen extends StatefulWidget {
   final String orderId;
   final String rosBaseUrl;
@@ -19,189 +23,110 @@ class FuelProgressScreen extends StatefulWidget {
       : super(key: key);
 
   @override
-  State<FuelProgressScreen> createState() => _FuelProgressScreenState();
+  State<FuelProgressScreen> createState() => _FuelProgressScreenStateWrapper();
 }
 
-class _FuelProgressScreenState extends State<FuelProgressScreen>
-    with SingleTickerProviderStateMixin {
-  final FlutterTts _flutterTts = FlutterTts();
-  final SpeechToText _speechToText = SpeechToText();
-  bool _isListening = false;
-  String _voiceCommandStatusText = '주유 중 궁금한 점을 말씀해주세요.';
-  bool _isSpeaking = false;
+/// VoiceInteractionService를 하위 위젯에 제공하기 위한 래퍼
+class _FuelProgressScreenStateWrapper extends State<FuelProgressScreen> {
+  @override
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (_) => VoiceInteractionService(),
+      child: _FuelProgressScreenContent(
+        orderId: widget.orderId,
+        rosBaseUrl: widget.rosBaseUrl,
+      ),
+    );
+  }
+}
 
+/// 주유 진행 화면의 실제 UI와 상태를 포함하는 위젯
+class _FuelProgressScreenContent extends StatefulWidget {
+  final String orderId;
+  final String rosBaseUrl;
+
+  const _FuelProgressScreenContent({required this.orderId, required this.rosBaseUrl});
+
+  @override
+  State<_FuelProgressScreenContent> createState() => _FuelProgressScreenState();
+}
+
+/// 주유 진행 화면의 상태 관리 로직 (서버 폴링, 음성 대화, UI 업데이트)
+class _FuelProgressScreenState extends State<_FuelProgressScreenContent>
+    with SingleTickerProviderStateMixin {
+  late VoiceInteractionService _voiceService;
   Timer? _timer;
   String _status = '대기 중';
   int _progress = 0;
   bool _completed = false;
   int _countdown = 5;
-  bool _isFinishingSoon = false; // 주유 완료 임박 상태
+  bool _isFinishingSoon = false; 
   Timer? _countdownTimer;
-
   TabController? _tabController;
   String? _serverIp;
 
+  /// 위젯 초기화
   @override
   void initState() {
     super.initState();
-    // 탭 컨트롤러 초기화
+    _voiceService = Provider.of<VoiceInteractionService>(context, listen: false);
     _tabController = TabController(length: 2, vsync: this);
-    _initTtsAndSpeak();
-    _initStt();
+    _initializeScreen();
+  }
+
+  /// 화면에 필요한 서비스 초기화 및 폴링 시작
+  Future<void> _initializeScreen() async {
+    _voiceService.onResult = _processVoiceCommand;
     _extractIpAndStartPolling();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startInitialConversation());
   }
 
-  Future<void> _initTtsAndSpeak() async {
-    await _flutterTts.setLanguage('ko-KR');
-    await _flutterTts.setSpeechRate(1.0);
-    // speak 함수가 즉시 반환되도록 awaitSpeakCompletion 설정을 false로 변경합니다.
-    await _flutterTts.awaitSpeakCompletion(false);
-
-    // 음성 출력 시작/종료 시 _isSpeaking 상태를 업데이트하여 UI를 제어합니다.
-    _flutterTts.setStartHandler(() {
-      if (mounted) setState(() => _isSpeaking = true);
-    });
-    _flutterTts.setCompletionHandler(() {
-      if (mounted) setState(() => _isSpeaking = false);
-    });
-    _flutterTts.setErrorHandler((msg) {
-      if (mounted) setState(() => _isSpeaking = false);
-    });
-    await _flutterTts.speak("주유중입니다.");
+  /// 초기 음성 안내 시작
+  Future<void> _startInitialConversation() async {
+    if (!mounted) return;
+    await _voiceService.speak("주유중입니다.");
+    _voiceService.speakAndListen("도움이 필요하신게 있으신가요?");
   }
 
-  Future<void> _initStt() async {
-    await _speechToText.initialize(
-      onStatus: (status) {}, // 상태 변경을 여기서 직접 처리하지 않음
-    );
-  }
-
-  void _toggleListening() {
-    if (!_speechToText.isAvailable || _completed || _isFinishingSoon) return;
-    if (_isListening) {
-      _stopListening();
-    } else {
-      _startListening();
-    }
-  }
-
-  void _startListening() {
-    if (!_speechToText.isAvailable) return;
-    setState(() {
-      _isListening = true;
-      _voiceCommandStatusText = '듣는 중...';
-    });
-    _speechToText.listen(
-      onResult: (result) {
-        if (result.finalResult) {
-          _processVoiceCommand(result.recognizedWords);
-        }
-      },
-      localeId: 'ko_KR',
-      listenFor: const Duration(seconds: 5), // 5초 후 자동으로 듣기 종료
-    );
-  }
-
-  void _stopListening() {
-    _speechToText.stop();
-    if (mounted) setState(() => _isListening = false);
-  }
-
+  /// 사용자 음성 명령 처리
   Future<void> _processVoiceCommand(String command) async {
     if (command.isEmpty) return;
 
-    setState(() {
-      _voiceCommandStatusText = '분석 중...';
-      _isListening = false;
-    });
+    final totalDuration = AppConfig.totalFuelingSeconds;
+    final remainingSeconds = (totalDuration * (100 - _progress) / 100.0).round();
 
-    final prompt = """
-        사용자의 질문 의도를 다음 중 하나로 분류하고 JSON 형식으로 반환해줘.
-        사용 가능한 의도: 'progress_query', 'time_query', 'hungry_query', 'wipe_query', 'thirsty_query', 'news_query', 'weather_query', 'joke_query', 'music_query', 'book_query', 'movie_query', 'restaurant_query', 'travel_query', 'health_query', 'tech_query', 'finance_query', 'etc'.
+    final manager = ConversationManagerService();
+    final action = await manager.processVoiceCommand(
+      command: command,
+      screen: ConversationScreen.fuelProgress,
+      context: {
+        'progress': _progress,
+        'remainingSeconds': remainingSeconds,
+      },
+    );
 
-        - 'progress_query': 주유 진행률(%)을 묻는 질문. (예: "얼마나 됐어?", "진행률 알려줘")
-        - 'time_query': 남은 시간을 묻는 질문. (예: "몇 초 남았어?", "언제 끝나?")
-        - 'hungry_query': 배고픔과 관련된 표현. (예: "배고파", "출출한데", "뭐 먹을 거 없어?")
-        - 'wipe_query': 무언가 닦을 것이 필요하다는 표현. (예: "뭐 닦아야 하는데", "휴지 좀")
-        - 'thirsty_query': 목마름과 관련된 표현. (예: "목말라", "마실 것 좀 줘")
-        - 'news_query', 'weather_query', 'joke_query', 'music_query', 'book_query', 'movie_query', 'restaurant_query', 'travel_query', 'health_query', 'tech_query', 'finance_query': 일반적인 정보성 질문.
-        - 'etc': 위 분류에 해당하지 않는 모든 경우.
+    _handleConversationAction(action);
+  }
 
-        결과 예시: {"intent": "time_query"}
+  /// 대화 분석 결과에 따른 액션 수행
+  void _handleConversationAction(ConversationAction action) {
+    if (!mounted) return;
 
-        사용자 질문: "$command"
-        """;
+    if (action.stateUpdate['deactivate_voice'] == true) {
+      _voiceService.deactivateFeature(action.speakText ?? "네, 알겠습니다.");
+      return;
+    }
 
- try {
-      final result = await LlmService.generateContent(prompt);
-      final intent = result['intent'] as String? ?? 'etc';
-      String responseText;
-
-      switch (intent) {
-        case 'progress_query':
-          final remainingPercent = 100 - _progress;
-          responseText = "현재 $_progress% 완료, 약 $remainingPercent% 남았습니다.";
-          break;
-        case 'time_query':
-          const totalDuration = 60.0; // 총 주유 시간 (초)
-          final remainingSeconds = (totalDuration * (100 - _progress) / 100).round();
-          responseText = "약 $remainingSeconds초 남았습니다.";
-          break;
-        case 'hungry_query':
-          responseText = "간식을 가져다드리겠습니다. (약 30초 소요)";
-          break;
-        case 'wipe_query':
-          responseText = "휴지를 가져다드리겠습니다. (약 10초 소요)";
-          break;
-        case 'thirsty_query':
-          responseText = "물을 가져다드리겠습니다. (약 20초 소요)";
-          break;
-        case 'news_query':
-        case 'weather_query':
-        case 'joke_query':
-        case 'music_query':
-        case 'book_query':
-        case 'movie_query':
-        case 'restaurant_query':
-        case 'travel_query':
-        case 'health_query':
-        case 'tech_query':
-        case 'finance_query':
-        default:
-          // LLM을 사용하여 자연스러운 답변 생성
-          final responsePrompt = """
-          당신은 주유 중인 운전자를 돕는 친절한 AI 비서입니다.
-          사용자의 질문에 대해 간결하고 친절한 한 문장으로 답변해주세요.
-
-          사용자 질문: "$command"
-          """;
-          responseText = await LlmService.generateTextOnly(responsePrompt);
-      }
-
-      // 1. 화면의 텍스트를 먼저 업데이트합니다.
-      if (mounted) {
-        setState(() {
-          _voiceCommandStatusText = responseText;
-        });
-      }
-      // 2. UI가 실제로 렌더링된 다음 TTS 실행
-      await _flutterTts.speak(responseText);
-    } catch (e) {
-      debugPrint('LLM 의도 분석 오류: $e');
-      // API 오류 발생 시 사용자에게 피드백 제공
-      const String errorMessage = 'AI 서버가 응답하지 않습니다. 잠시 후 다시 시도해주세요.';
-      await _flutterTts.speak(errorMessage);
-      if (mounted) {
-        setState(() {
-          _voiceCommandStatusText = errorMessage;
-        });
+    if (action.speakText != null && _voiceService.isFeatureActive) {
+      if (action.shouldListenNext) {
+        _voiceService.speakAndListen(action.speakText!);
+      } else {
+        _voiceService.speak(action.speakText!);
       }
     }
   }
 
-  /// 음성 인식 및 분석이 진행 중인지 여부를 반환합니다.
-  bool get _isVoiceProcessing => _isListening || _voiceCommandStatusText == '분석 중...' || _isSpeaking;
-
+  /// 서버 URL에서 IP를 추출하고 상태 폴링 시작
   void _extractIpAndStartPolling() {
     try {
       final uri = Uri.parse(widget.rosBaseUrl);
@@ -219,22 +144,22 @@ class _FuelProgressScreenState extends State<FuelProgressScreen>
     }
   }
 
+  /// 위젯 종료 시 타이머 정리
   @override
   void dispose() {
     _timer?.cancel();
     _tabController?.dispose();
-    _countdownTimer?.cancel();
-    _flutterTts.stop();
     super.dispose();
   }
 
+  /// 서버로부터 주유 상태 주기적으로 조회
   Future<void> _fetchStatus() async {
     if (_serverIp == null) {
       debugPrint("Server IP not yet extracted, skipping poll.");
       return;
     }
 
-    final statusUrl = Uri.parse('http://$_serverIp:8000/status/${widget.orderId}');
+    final statusUrl = Uri.parse('http://$_serverIp:${AppConfig.rosApiPort}/status/${widget.orderId}');
 
     try {
       final res = await http.get(statusUrl).timeout(const Duration(seconds: 6));
@@ -243,9 +168,9 @@ class _FuelProgressScreenState extends State<FuelProgressScreen>
         if (body is Map) {
           final s = (body['status'] ?? '').toString();
           final p = (int.tryParse(body['progress']?.toString() ?? '0') ?? 0).clamp(0, 100);
-
-          const totalDuration = 60.0; // 총 주유 시간 (초)
-          final remainingSeconds = (totalDuration * (100 - p) / 100).round();
+          
+          final totalDuration = AppConfig.totalFuelingSeconds;
+          final remainingSeconds = (totalDuration * (100 - p) / 100.0).round();
 
           setState(() {
             _status = s.isNotEmpty ? s : _status;
@@ -257,11 +182,10 @@ class _FuelProgressScreenState extends State<FuelProgressScreen>
           }
         }
       }
-    } catch (e) {
-      // 네트워크 에러는 무시
-    }
+    } catch (e) { /* 네트워크 에러는 무시 */ }
   }
 
+  /// 주유 완료 시 처리 로직
   Future<void> _onCompleted() async {
     if (_completed) return;
     _timer?.cancel();
@@ -273,7 +197,7 @@ class _FuelProgressScreenState extends State<FuelProgressScreen>
       _progress = 100;
     });
 
-    await _flutterTts.speak("주유를 완료했습니다. 안녕히 가세요.");
+    await _voiceService.speak("주유를 완료했습니다. 안녕히 가세요.");
 
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_countdown > 1) {
@@ -287,28 +211,26 @@ class _FuelProgressScreenState extends State<FuelProgressScreen>
     });
   }
 
+  /// 홈 화면(주유 설정)으로 이동
   void _navigateToHome() {
     if (mounted) {
       _countdownTimer?.cancel();
-      Navigator.popUntil(context, (route) => route.isFirst);
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const FuelSelectionScreen()),
+        (Route<dynamic> route) => false, 
+      );
     }
   }
 
+  /// 화면 UI 구성
   @override
   Widget build(BuildContext context) {
-    const tossBlue = Color(0xFF3182F7);
-    const darkGrayText = Color(0xFF333D4B);
-    const lightGrayText = Color(0xFF6B7684);
-    const lightGrayBg = Color(0xFFF2F4F6);
-    const white = Colors.white;
+    final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: white,
       appBar: AppBar(
-        title: const Text('주유 진행 상황', style: TextStyle(color: darkGrayText)),
-        backgroundColor: white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: darkGrayText),
+        title: const Text('주유 진행 상황'),
         automaticallyImplyLeading: false,
       ),
       body: Padding(
@@ -318,34 +240,37 @@ class _FuelProgressScreenState extends State<FuelProgressScreen>
             Expanded(
               flex: 5,
               child: _serverIp == null
-                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2, color: tossBlue))
+                  ? Center(child: CircularProgressIndicator(strokeWidth: 2, color: theme.primaryColor))
                   : Card(
                       clipBehavior: Clip.antiAlias,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       elevation: 0,
-                      color: lightGrayBg,
+                      color: AppColors.surface,
                       child: Column(
                         children: [
                           Expanded(
                             child: TabBarView(
                               controller: _tabController,
                               children: [
-                                RealSenseViewWidget(serverIp: _serverIp!),
-                                VideoViewWidget(serverIp: _serverIp!),
+                                RealSenseViewWidget(
+                                  serverIp: AppConfig.rosIp,
+                                  streamPort: AppConfig.realsenseStreamerPort.toString(),
+                                ),
+                                VideoViewWidget(
+                                  serverIp: AppConfig.rosIp,
+                                  streamPort: AppConfig.webcamStreamerPort.toString(),
+                                ),
                               ],
                             ),
                           ),
                           TabBar(
                             controller: _tabController,
-                            labelColor: darkGrayText,
-                            unselectedLabelColor: lightGrayText,
-                            indicatorColor: tossBlue,
+                            labelColor: AppColors.textPrimary,
+                            unselectedLabelColor: AppColors.textSecondary,
+                            indicatorColor: theme.primaryColor,
                             indicatorWeight: 3.0,
-                            dividerColor: Colors.transparent, // 탭 하단 구분선 제거
-                            tabs: const [
-                              Tab(text: '로봇 뷰'),
-                              Tab(text: '차량 뷰'),
-                            ],
+                            dividerColor: Colors.transparent,
+                            tabs: const [Tab(text: '로봇 뷰'), Tab(text: '차량 뷰')],
                           ),
                         ],
                       ),
@@ -355,34 +280,35 @@ class _FuelProgressScreenState extends State<FuelProgressScreen>
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: lightGrayBg,
+                color: AppColors.surface,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _completed ? '주유 완료!' : '주유 중입니다...',
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: darkGrayText),
+                    _completed ? '주유가 완료되었습니다!' : '주유 중입니다...',
+                    style: theme.textTheme.headlineSmall,
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '주문 ID: ${widget.orderId}',
-                    style: const TextStyle(fontSize: 14, color: lightGrayText),
+                    '주문 ID: ${widget.orderId}', 
+                    style: theme.textTheme.bodySmall,
                   ),
                   const SizedBox(height: 20),
                   LinearProgressIndicator(
                     value: _progress / 100.0,
                     minHeight: 10,
                     backgroundColor: Colors.grey[300],
-                    color: tossBlue,
+                    color: theme.primaryColor,
                   ),
                   const SizedBox(height: 8),
                   Align(
                     alignment: Alignment.centerRight,
                     child: Text(
                       '$_progress%',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: darkGrayText),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                     ),
                   ),
                 ],
@@ -390,31 +316,10 @@ class _FuelProgressScreenState extends State<FuelProgressScreen>
             ),
             const SizedBox(height: 24),
             if (!_completed)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: lightGrayBg,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: Icon(
-                        _isVoiceProcessing || _isFinishingSoon ? Icons.mic_off : Icons.mic,
-                        color: _isVoiceProcessing || _isFinishingSoon ? Colors.grey : darkGrayText,
-                      ),
-                      onPressed: _isVoiceProcessing || _isFinishingSoon ? null : _toggleListening,
-                      tooltip: '궁금한 점을 질문하세요',
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _voiceCommandStatusText,
-                        style: TextStyle(fontSize: 16, color: _isFinishingSoon ? Colors.grey : lightGrayText),
-                      ),
-                    ),
-                  ],
-                ),
+              VoiceCommandBar(
+                initialText: '주유 중 궁금한 점을 말씀해주세요.',
+                backgroundColor: AppColors.surface,
+                textColor: AppColors.textPrimary,
               ),
             if (_completed) const Spacer(),
           ],
@@ -424,18 +329,9 @@ class _FuelProgressScreenState extends State<FuelProgressScreen>
         padding: const EdgeInsets.all(20.0),
         child: ElevatedButton(
           onPressed: _completed ? _navigateToHome : null,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: tossBlue,
-            foregroundColor: white,
-            disabledBackgroundColor: lightGrayBg,
-            disabledForegroundColor: darkGrayText.withOpacity(0.38),
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            elevation: 0,
-          ),
+          style: theme.elevatedButtonTheme.style,
           child: Text(
             _completed ? '$_countdown초 후 홈으로 이동' : '주유 중입니다',
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
         ),
       ),

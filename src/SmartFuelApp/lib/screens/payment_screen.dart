@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:flutter_tts/flutter_tts.dart';
-import 'package:speech_to_text/speech_to_text.dart';
+import 'package:provider/provider.dart';
 import 'fuel_progress_screen.dart';
 import 'dart:math';
+import '../widgets/voice_command_bar.dart';
+import '../services/voice_interaction_service.dart';
+import '../config/app_config.dart';
 import '../services/llm_service.dart';
+import '../theme/app_theme.dart';
 
+/// 결제 수단을 선택하고 결제를 진행하는 화면
 class PaymentScreen extends StatefulWidget {
   final String fuelType;
   final int amount;
@@ -15,83 +19,62 @@ class PaymentScreen extends StatefulWidget {
       : super(key: key);
 
   @override
-  State<PaymentScreen> createState() => _PaymentScreenState();
+  State<PaymentScreen> createState() => _PaymentScreenStateWrapper();
 }
 
-class _PaymentScreenState extends State<PaymentScreen> {
-  final FlutterTts _flutterTts = FlutterTts();
-  final SpeechToText _speechToText = SpeechToText();
-  bool _isListening = false;
-  String _recognizedWords = '';
+/// VoiceInteractionService를 하위 위젯에 제공하기 위한 래퍼
+class _PaymentScreenStateWrapper extends State<PaymentScreen> {
+  @override
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (_) => VoiceInteractionService(),
+      child: _PaymentScreenContent(
+        fuelType: widget.fuelType,
+        amount: widget.amount,
+      ),
+    );
+  }
+}
+
+/// 결제 화면의 실제 UI와 상태를 포함하는 위젯
+class _PaymentScreenContent extends StatefulWidget {
+  final String fuelType;
+  final int amount;
+
+  const _PaymentScreenContent({required this.fuelType, required this.amount});
+
+  @override
+  State<_PaymentScreenContent> createState() => _PaymentScreenState();
+}
+
+/// 결제 화면의 상태 관리 로직 (결제 수단 선택, 음성 명령 처리, 결제 시뮬레이션)
+class _PaymentScreenState extends State<_PaymentScreenContent> {
   bool isProcessing = false;
-  final String rosServerUrl = 'http://192.168.50.152:8000/start_fuel'; // 수정 필요
   String _selectedPaymentMethod = '신용카드';
   int _selectedCardIndex = 0;
   final List<String> _cardNumbers = [];
+  bool _isAwaitingConfirmation = false; 
+  late VoiceInteractionService _voiceService;
 
+  /// 위젯 초기화
   @override
   void initState() {
     super.initState();
-    _initTts();
-    _initStt();
-    // Generate random card numbers
+    _voiceService = Provider.of<VoiceInteractionService>(context, listen: false);
+    _voiceService.onResult = _processVoiceCommand;
+
     for (int i = 0; i < 5; i++) {
       _cardNumbers.add((Random().nextInt(9000) + 1000).toString());
     }
-  }
 
-  Future<void> _initTts() async {
-    await _flutterTts.setLanguage('ko-KR');
-    await _flutterTts.setSpeechRate(1.0);
-  }
-
-  Future<void> _initStt() async {
-    await _speechToText.initialize(
-      onStatus: (status) {}, // 상태 변경을 여기서 직접 처리하지 않음
-    );
-  }
-
-  void _toggleListening() {
-    if (!_speechToText.isAvailable) return;
-    if (_isListening) {
-      _stopListening();
-    } else {
-      _startListening();
-    }
-  }
-
-  void _startListening() {
-    if (!_speechToText.isAvailable) return;
-    setState(() {
-      _isListening = true;
-      _recognizedWords = '듣는 중...';
-    });
-      _speechToText.listen(
-        onResult: (result) {
-          if (result.finalResult) {
-            _processVoiceCommand(result.recognizedWords);
-          }
-        },
-        localeId: 'ko_KR',
-        listenFor: const Duration(seconds: 5), // 5초 후 자동으로 듣기 종료
-      );
-    }
-
-  void _stopListening() {
-    _speechToText.stop();
-    if (!mounted) return;
-    setState(() {
-      _isListening = false;
-      _recognizedWords = '';
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _voiceService.speakAndListen('결제 수단을 말씀해주세요.');
     });
   }
 
+  /// 사용자 음성 명령 처리
   Future<void> _processVoiceCommand(String command) async {
     if (command.isEmpty) return;
-    setState(() {
-      _isListening = false;
-      _recognizedWords = '분석 중...';
-    });
 
     final prompt = """
     사용자의 결제 요청에서 결제 수단과 결제 실행 여부를 추출해줘.
@@ -99,14 +82,17 @@ class _PaymentScreenState extends State<PaymentScreen> {
     - 사용자가 '카드'라고 말하면 '신용카드'로 인식해줘.
     - 사용자가 "N번째 카드" 또는 "N번 카드"라고 말하면, 카드 인덱스를 0부터 시작하는 숫자로 알려줘. (예: "3번 카드" -> 2)
     - "가운데 카드"는 인덱스 2로 처리해줘.
-    - "마지막 카드"는 인덱스 4로 처리해줘.
-    - 카드 색상과 인덱스는 다음과 같이 매칭해줘: '회색' 또는 '검정색' -> 0, '파란색' 또는 '하늘색'-> 1, '주황색' 또는 '분홍색' -> 2, '초록색' 또는 '노란색' -> 3, '보라색' -> 4.
+    - "마지막 카드"는 인덱스 4로 처리해줘.    
+    - 카드 색상과 인덱스 매칭: '회색'/'검정색' -> 0, '파란색'/'하늘색'-> 1, '주황색'/'분홍색' -> 2, '초록색'/'노란색' -> 3, '보라색' -> 4.
     - 사용자가 '결제', '해줘', '할게' 등 결제를 실행하려는 의도를 보이면 "performPayment": true 를 포함해줘.
+    - 사용자가 "응", "네", "맞아" 등 긍정적인 답변을 하면 "confirmation": "positive" 를 포함해줘.
+    - 사용자가 "괜찮아", "내가 할게" 등 직접 조작 의사를 보이면 "intent": "no_help_needed" 를 포함해줘.
     - 결과는 반드시 JSON 형식으로 반환해줘.
     - 예시 1: "카카오페이" -> {"paymentMethod": "카카오페이"}
     - 예시 2: "세 번째 카드로 할게" -> {"paymentMethod": "신용카드", "cardIndex": 2, "performPayment": true}
     - 예시 3: "가운데 카드로 결제해줘" -> {"paymentMethod": "신용카드", "cardIndex": 2, "performPayment": true}
     - 예시 4: "파란색 카드로 해줘" -> {"paymentMethod": "신용카드", "cardIndex": 1, "performPayment": true}
+    - 예시 5: "응" -> {"confirmation": "positive"}
     - 알 수 없다면 null 값을 사용해줘.
 
     사용자 요청: "$command"
@@ -114,52 +100,81 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
     try {
       final result = await LlmService.generateContent(prompt);
-      bool shouldPay = false; // 결제 실행 여부 플래그
+      final method = result['paymentMethod'] as String?;
+      final index = result['cardIndex'] as int?;
+      final shouldPay = result['performPayment'] == true;
+      final confirmation = result['confirmation'] as String?;
+      final intent = result['intent'] as String?;
+
+      if (intent == 'no_help_needed') {
+        _voiceService.deactivateFeature("네, 직접 선택해주세요.");
+        return;
+      }
+      
+      if (_isAwaitingConfirmation && confirmation == 'positive') {
+        setState(() => _isAwaitingConfirmation = false);
+        await simulatePayment();
+        return;
+      }
+
+      if (method == null && confirmation == null) {
+        throw Exception("결제 수단을 인식하지 못했습니다.");
+      }
+
+      if (method == null) {
+        return;
+      }
+
+      String displayText = method;
+
+      if (method == '신용카드') {
+        if (index != null && index >= 0 && index < _cardNumbers.length) {
+          _selectedCardIndex = index;
+          displayText = '신용카드 ${index + 1}';
+        } else {
+          _selectedCardIndex = 0;
+          displayText = '신용카드 1';
+        }
+      }
+
+      if (shouldPay) {
+        displayText += '으로 결제합니다.';
+      }
 
       setState(() {
-        // 1. 결제 수단 업데이트
-        final method = result['paymentMethod'] as String?;
-        if (method == null) return;
-
         _selectedPaymentMethod = method;
-        String displayText = method;
-
         if (method == '신용카드') {
-          final index = result['cardIndex'] as int?;
-          if (index != null && index >= 0 && index < _cardNumbers.length) {
-            _selectedCardIndex = index;
-            displayText = '신용카드 ${index + 1}'; // 화면 표시용 텍스트
-          }
+          _selectedCardIndex = index ?? _selectedCardIndex;
         } else {
-          _selectedCardIndex = -1; // 간편결제 선택 시 카드 선택 해제
+          _selectedCardIndex = -1;
         }
-
-        // LLM이 수정한 내용을 바탕으로 화면에 표시할 텍스트를 업데이트
-        _recognizedWords = displayText;
-
-        // 2. 결제 실행 여부 확인
-        if (result['performPayment'] == true) {
-          shouldPay = true;
-        }
+        _voiceService.completeProcessing(displayText);
       });
 
-      // 3. 결제 실행 (setState 밖에서 호출)
-      if (shouldPay) await simulatePayment();
+      if (shouldPay) {
+        await simulatePayment();
+      } else if (method != null) {
+        _isAwaitingConfirmation = true;
+        final confirmationQuestion =
+            '${_selectedPaymentMethod == '신용카드' ? '신용카드 ${_selectedCardIndex + 1}' : _selectedPaymentMethod}(으)로 결제할까요?';
+        _voiceService.speakAndListen(confirmationQuestion);
+      }
+    } on ApiException catch (e) {
+      debugPrint('LLM API 오류: $e');
+      const errorMessage = '서버에 일시적인 문제가 발생했어요. 잠시 후 다시 시도해주세요.';
+      if (mounted) _voiceService.speakAndListen(errorMessage);
     } catch (e) {
       debugPrint('LLM 결제수단 분석 오류: $e');
-      setState(() {
-        _recognizedWords = '결제 수단을 이해하지 못했어요.';
-      });
+      const errorMessage = '죄송해요, 잘 이해하지 못했어요. 다시 말씀해주시겠어요?';
+      if (mounted) _voiceService.speakAndListen(errorMessage);
     }
   }
 
-  /// 음성 인식 및 분석이 진행 중인지 여부를 반환합니다.
-  bool get _isVoiceProcessing => _isListening || _recognizedWords == '분석 중...';
-
+  /// 결제 시뮬레이션 및 서버에 주유 시작 요청
   Future<void> simulatePayment() async {
+    await _voiceService.speak("결제를 시작합니다.");
     setState(() => isProcessing = true);
-
-    await Future.delayed(const Duration(seconds: 2)); // 가상 결제 지연
+    await Future.delayed(const Duration(seconds: 2)); 
 
     try {
       final orderId =
@@ -175,14 +190,14 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
       final res = await http
           .post(
-            Uri.parse(rosServerUrl),
+            Uri.parse('${AppConfig.rosBaseUrl}/start_fuel'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode(payload),
           )
           .timeout(const Duration(seconds: 8));
 
       if (res.statusCode == 200) {
-        await _flutterTts.speak("결제를 완료했습니다.");
+        await _voiceService.speak("결제를 완료했습니다.");
 
         String returnedOrderId = orderId;
         try {
@@ -198,8 +213,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           MaterialPageRoute(
             builder: (_) => FuelProgressScreen(
               orderId: returnedOrderId,
-              rosBaseUrl:
-                  rosServerUrl.replaceFirst(RegExp(r'/start_fuel\/?'), ''),
+              rosBaseUrl: AppConfig.rosBaseUrl,
             ),
           ),
         );
@@ -215,14 +229,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
   }
 
+  /// 카드 목록의 개별 카드 아이템 UI 생성
   Widget _buildCardItem(int index) {
     final isSelected = _selectedCardIndex == index;
     final cardGradients = [
-      [const Color(0xFF6B7684), const Color(0xFF333D4B)], // Grey
-      [const Color(0xFF0052D4), const Color(0xFF4364F7), const Color(0xFF6FB1FC)], // Blue
-      [const Color(0xFFD4145A), const Color(0xFFFBB03B)], // Orange/Pink
-      [const Color(0xFF009245), const Color(0xFFFCEE21)], // Green/Yellow
-      [const Color(0xFF4776E6), const Color(0xFF8E54E9)], // Purple/Blue
+      AppColors.cardGradientGrey,
+      AppColors.cardGradientBlue,
+      AppColors.cardGradientOrange,
+      AppColors.cardGradientGreen,
+      AppColors.cardGradientPurple,
     ];
 
     return Transform.scale(
@@ -237,7 +252,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(12),
-          border: isSelected ? Border.all(color: const Color(0xFF3182F7), width: 3) : null,
+          border: isSelected ? Border.all(color: AppColors.primary, width: 3) : null,
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.2),
@@ -267,6 +282,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
+  /// 스크롤 가능한 카드 목록 UI 생성
   Widget _buildCardList() {
     return SizedBox(
       height: 150,
@@ -274,15 +290,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
         scrollDirection: Axis.horizontal,
         itemCount: 5,
         itemBuilder: (context, index) {
+          final voiceService = Provider.of<VoiceInteractionService>(context);
           return GestureDetector(
-            onTap: _isVoiceProcessing
-                ? null
-                : () {
-                    setState(() {
-                      _selectedCardIndex = index;
-                      _selectedPaymentMethod = '신용카드';
-                    });
-                  },
+            onTap: voiceService.isProcessing ? null : () {
+              setState(() {
+                _selectedCardIndex = index;
+                _selectedPaymentMethod = '신용카드';
+                voiceService.deactivateOnManualSelection();
+              });
+            },
             child: _buildCardItem(index),
           );
         },
@@ -290,11 +306,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
+  /// 간편 결제 버튼 그룹 UI 생성
   Widget _buildPayButtons() {
     final payMethods = {
-      '네이버페이': {'bg': const Color(0xFFE6F8F0), 'text': const Color(0xFF03C75A)},
-      '카카오페이': {'bg': const Color(0xFFFFFBE6), 'text': const Color(0xFF3C1E1E)},
-      '토스페이': {'bg': const Color(0xFFE6F0FF), 'text': const Color(0xFF0064FF)},
+      '네이버페이': {'bg': AppColors.naverPayBg, 'text': AppColors.naverPayText},
+      '카카오페이': {'bg': AppColors.kakaoPayBg, 'text': AppColors.kakaoPayText},
+      '토스페이': {'bg': AppColors.tossPayBg, 'text': AppColors.tossPayText},
     };
 
     return Row(
@@ -303,17 +320,17 @@ class _PaymentScreenState extends State<PaymentScreen> {
         final bgColor = entry.value['bg']!;
         final textColor = entry.value['text']!;
         final isSelected = _selectedPaymentMethod == methodName;
+        final voiceService = Provider.of<VoiceInteractionService>(context);
 
         return Expanded(
           child: GestureDetector(
-            onTap: _isVoiceProcessing
-                ? null
-                : () {
-                    setState(() {
-                      _selectedPaymentMethod = methodName;
-                      _selectedCardIndex = -1; // Deselect card
-                    });
-                  },
+            onTap: voiceService.isProcessing ? null : () {
+              setState(() {
+                _selectedPaymentMethod = methodName;
+                _selectedCardIndex = -1; 
+                voiceService.deactivateOnManualSelection();
+              });
+            },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               height: 60,
@@ -321,17 +338,17 @@ class _PaymentScreenState extends State<PaymentScreen> {
               decoration: BoxDecoration(
                 color: bgColor,
                 borderRadius: BorderRadius.circular(12),
-                border: isSelected ? Border.all(color: const Color(0xFF3182F7), width: 3) : null,
+                border: isSelected ? Border.all(color: AppColors.primary, width: 3) : null,
               ),
               child: Center(
                 child: Text(
                   methodName,
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.bold,
                     color: textColor,
                   ),
-                ),
+                ), 
               ),
             ),
           ),
@@ -340,25 +357,19 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
+  /// 화면 UI 구성
   @override
   Widget build(BuildContext context) {
-    const tossBlue = Color(0xFF3182F7);
-    const darkGrayText = Color(0xFF333D4B);
-    const lightGrayText = Color(0xFF6B7684);
-    const white = Colors.white;
+    final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: white,
       appBar: AppBar(
-        title: const Text('결제', style: TextStyle(color: darkGrayText)),
-        backgroundColor: white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: darkGrayText),
+        title: const Text('결제'),
       ),
       body: isProcessing
           ? Center(
               child: CircularProgressIndicator(
-                color: tossBlue,
+                color: theme.primaryColor,
               ),
             )
           : SingleChildScrollView(
@@ -368,81 +379,44 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 children: [
                   Text(
                     '${widget.amount}원',
-                    style: const TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: darkGrayText,
-                    ),
+                    style: theme.textTheme.displaySmall,
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '${widget.fuelType} 주유를 진행합니다.',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      color: lightGrayText,
-                    ),
+                    '${widget.fuelType} 주유를 진행합니다.', 
+                    style: theme.textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary),
                   ),
                   const SizedBox(height: 40),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF2F4F6),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          icon: Icon(
-                            _isVoiceProcessing ? Icons.mic_off : Icons.mic,
-                            color: _isVoiceProcessing ? Colors.grey : darkGrayText,
-                          ),
-                          onPressed: isProcessing || _isVoiceProcessing ? null : _toggleListening,
-                          tooltip: '음성으로 결제수단 선택',
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _recognizedWords.isNotEmpty ? _recognizedWords : '결제 수단을 말씀해주세요.',
-                            style: const TextStyle(fontSize: 16, color: darkGrayText),
-                          ),
-                        ),
-                      ],
-                    ),
+                  VoiceCommandBar(
+                    initialText: '결제 수단을 말씀해주세요.',
+                    backgroundColor: AppColors.surface,
+                    textColor: AppColors.textPrimary,
                   ),
                   const SizedBox(height: 40),
-                  const Text( // '카드 선택' 제목
+                  Text( 
                     '카드 선택',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: darkGrayText),
+                    style: theme.textTheme.titleLarge?.copyWith(fontSize: 20),
                   ),
                   const SizedBox(height: 16),
-                  _buildCardList(), // 카드 목록 위젯
+                  _buildCardList(), 
                   const SizedBox(height: 40),
-                  const Text( // '간편 결제' 제목
+                  Text( 
                     '간편 결제',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: darkGrayText),
+                    style: theme.textTheme.titleLarge?.copyWith(fontSize: 20),
                   ),
                   const SizedBox(height: 16),
-                  _buildPayButtons(), // 간편 결제 버튼 위젯
+                  _buildPayButtons(), 
                 ],
               ),
             ),
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.all(20.0),
-        child: ElevatedButton(
-          onPressed: isProcessing || _isVoiceProcessing ? null : simulatePayment,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: tossBlue,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            elevation: 0,
-            disabledBackgroundColor: Colors.grey[300],
-          ),
-          child: const Text(
-            '결제하기',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-          ),
+        child: Consumer<VoiceInteractionService>(
+          builder: (context, voiceService, child) => ElevatedButton(
+          onPressed: isProcessing || voiceService.isProcessing ? null : simulatePayment,
+          style: theme.elevatedButtonTheme.style,
+          child: const Text('결제하기'),
+        ),
         ),
       ),
     );
