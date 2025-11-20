@@ -45,7 +45,8 @@ setup(
                 'webcam_streamer = dsr_example.webcam_streamer:main',
                 'webcam_manager_ros = dsr_example.webcam_manager_ros:main',
                 'ocr_manager_ros = dsr_example.ocr_manager_ros:main',
-                'ocr_streamer = dsr_example.ocr_streamer:main'
+                'ocr_streamer = dsr_example.ocr_streamer:main',
+                'llm_narrator_client = dsr_example.llm_narrator_client:main',
             ],
         },
     )
